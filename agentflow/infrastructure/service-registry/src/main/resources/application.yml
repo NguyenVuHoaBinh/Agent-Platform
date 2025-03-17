@@ -4,20 +4,73 @@ server:
 spring:
   application:
     name: service-registry
+  security:
+    user:
+      name: ${EUREKA_USERNAME:admin}
+      password: ${EUREKA_PASSWORD:admin}
+  profiles:
+    active: default
 
+# Default profile configuration
 eureka:
-  client:
-    register-with-eureka: false
-    fetch-registry: false
-  server:
-    enable-self-preservation: false
-    wait-time-in-ms-when-sync-empty: 0
-    response-cache-update-interval-ms: 5000
   instance:
     hostname: localhost
     prefer-ip-address: true
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  server:
+    enable-self-preservation: false
+    renewal-percent-threshold: 0.85
+    response-cache-update-interval-ms: 5000
+    wait-time-in-ms-when-sync-empty: 0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
 
 logging:
   level:
     com.netflix.eureka: INFO
     com.netflix.discovery: INFO
+    viettel.dac.serviceregistry: INFO
+
+---
+# Docker profile configuration
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+eureka:
+  instance:
+    hostname: service-registry
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://service-registry:8761/eureka/
+
+---
+# Production profile configuration
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+eureka:
+  instance:
+    hostname: ${EUREKA_HOSTNAME:service-registry}
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVICE_URL:http://service-registry:8761/eureka/}
+  server:
+    enable-self-preservation: true
+    renewal-percent-threshold: 0.85

@@ -4,13 +4,26 @@ server:
 spring:
   application:
     name: config-server
+  security:
+    user:
+      name: ${CONFIG_USERNAME:config}
+      password: ${CONFIG_PASSWORD:config}
   profiles:
-    active: native  # Use native file system for development
+    active: native
   cloud:
     config:
       server:
         native:
           search-locations: classpath:/config-repo, file:./config-repo
+        # Git configuration for production
+        # git:
+        #   uri: ${CONFIG_GIT_URI:https://github.com/your-org/agentflow-config.git}
+        #   default-label: ${CONFIG_GIT_BRANCH:main}
+        #   search-paths: ${CONFIG_SEARCH_PATHS:config-repo}
+        #   username: ${CONFIG_GIT_USERNAME:}
+        #   password: ${CONFIG_GIT_PASSWORD:}
+        #   clone-on-start: true
+        #   force-pull: true
 
 eureka:
   client:
@@ -20,9 +33,53 @@ eureka:
     register-with-eureka: true
   instance:
     prefer-ip-address: true
+    instance-id: ${spring.application.name}:${random.value}
 
 management:
   endpoints:
     web:
       exposure:
-        include: "*"
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+
+---
+# Docker profile
+spring:
+  config:
+    activate:
+      on-profile: docker
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: file:/config-repo
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://service-registry:8761/eureka/
+
+---
+# Production profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+  cloud:
+    config:
+      server:
+        git:
+          uri: ${CONFIG_GIT_URI}
+          default-label: ${CONFIG_GIT_BRANCH:main}
+          search-paths: ${CONFIG_SEARCH_PATHS:}
+          username: ${CONFIG_GIT_USERNAME:}
+          password: ${CONFIG_GIT_PASSWORD:}
+          clone-on-start: true
+          force-pull: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVICE_URL:http://service-registry:8761/eureka/}

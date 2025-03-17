@@ -1,3 +1,4 @@
+# Common configuration for all services
 spring:
   jpa:
     hibernate:
@@ -11,11 +12,12 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+# Actuator settings
 management:
   endpoints:
     web:
       exposure:
-        include: "*"
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always
@@ -27,6 +29,7 @@ management:
     db:
       enabled: true
 
+# Resilience settings
 resilience4j:
   circuitbreaker:
     configs:
@@ -51,6 +54,7 @@ resilience4j:
           - java.util.concurrent.TimeoutException
           - java.io.IOException
 
+# Logging
 logging:
   level:
     root: INFO
@@ -58,13 +62,21 @@ logging:
     viettel.dac: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: /var/log/${spring.application.name}/${spring.application.name}.log
+    max-size: 10MB
+    max-history: 7
 
+# Eureka settings
 eureka:
   client:
     service-url:
-      defaultZone: http://service-registry:8761/eureka/
+      defaultZone: http://${EUREKA_USERNAME:admin}:${EUREKA_PASSWORD:admin123}@service-registry:8761/eureka/
     fetch-registry: true
     register-with-eureka: true
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${random.value}
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90

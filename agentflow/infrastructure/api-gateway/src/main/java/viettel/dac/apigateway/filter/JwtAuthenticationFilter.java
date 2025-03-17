@@ -2,6 +2,7 @@ package viettel.dac.apigateway.filter;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -14,9 +15,8 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
 
@@ -25,6 +25,14 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
     @Value("${jwt.secret}")
     private String secret;
+
+    private static final List<String> PUBLIC_ENDPOINTS = Arrays.asList(
+            "/api/auth/login",
+            "/api/auth/register",
+            "/api/auth/refresh-token",
+            "/actuator",
+            "/fallback"
+    );
 
     public JwtAuthenticationFilter() {
         super(Config.class);
@@ -35,38 +43,49 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
         return (exchange, chain) -> {
             ServerHttpRequest request = exchange.getRequest();
 
-            final List<String> apiEndpoints = List.of("/api/auth/register", "/api/auth/login");
+            // Check if request path is a public endpoint that doesn't require authentication
+            if (isPublicEndpoint(request)) {
+                return chain.filter(exchange);
+            }
 
-            Predicate<ServerHttpRequest> isApiSecured = r -> apiEndpoints.stream()
-                    .noneMatch(uri -> r.getURI().getPath().contains(uri));
+            // Check for Authorization header
+            if (!request.getHeaders().containsKey("Authorization")) {
+                return onError(exchange, "Authorization header is missing", HttpStatus.UNAUTHORIZED);
+            }
 
-            if (isApiSecured.test(request)) {
-                if (!request.getHeaders().containsKey("Authorization")) {
-                    return onError(exchange, "No Authorization header", HttpStatus.UNAUTHORIZED);
-                }
+            String authorizationHeader = request.getHeaders().getFirst("Authorization");
+            if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+                return onError(exchange, "Invalid Authorization header format", HttpStatus.UNAUTHORIZED);
+            }
 
-                String authorizationHeader = request.getHeaders().get("Authorization").get(0);
-                String token = authorizationHeader.replace("Bearer ", "");
+            String token = authorizationHeader.substring(7);
 
-                try {
-                    if (!isValidToken(token)) {
-                        return onError(exchange, "Invalid JWT token", HttpStatus.UNAUTHORIZED);
-                    }
-                } catch (Exception e) {
-                    return onError(exchange, "Invalid JWT token: " + e.getMessage(), HttpStatus.UNAUTHORIZED);
+            try {
+                // Validate token and extract claims
+                Claims claims = extractClaims(token);
+
+                // Check if token is expired
+                if (claims.getExpiration().getTime() < System.currentTimeMillis()) {
+                    return onError(exchange, "Token has expired", HttpStatus.UNAUTHORIZED);
                 }
 
                 // Add user information to request headers for downstream services
-                Claims claims = extractClaims(token);
-                exchange = exchange.mutate()
-                        .request(exchange.getRequest().mutate()
-                                .header("X-Auth-UserId", claims.getSubject())
-                                .build())
+                ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
+                        .header("X-Auth-UserId", claims.getSubject())
+                        .header("X-Auth-Username", claims.get("username", String.class))
+                        .header("X-Auth-Roles", claims.get("roles", String.class))
                         .build();
-            }
 
-            return chain.filter(exchange);
+                return chain.filter(exchange.mutate().request(mutatedRequest).build());
+            } catch (Exception e) {
+                return onError(exchange, "Invalid token: " + e.getMessage(), HttpStatus.UNAUTHORIZED);
+            }
         };
+    }
+
+    private boolean isPublicEndpoint(ServerHttpRequest request) {
+        return PUBLIC_ENDPOINTS.stream()
+                .anyMatch(endpoint -> request.getURI().getPath().startsWith(endpoint));
     }
 
     private Mono<Void> onError(ServerWebExchange exchange, String err, HttpStatus httpStatus) {
@@ -75,18 +94,8 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
         return response.setComplete();
     }
 
-    private boolean isValidToken(String token) {
-        try {
-            extractClaims(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     private Claims extractClaims(String token) {
-        byte[] decodedKey = Base64.getDecoder().decode(secret.getBytes(StandardCharsets.UTF_8));
-        SecretKey key = new SecretKeySpec(decodedKey, 0, decodedKey.length, "HmacSHA256");
+        SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
 
         return Jwts.parser()
                 .verifyWith(key)
@@ -96,6 +105,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
     }
 
     public static class Config {
-        // Put configuration properties here
+        // Configuration properties if needed
     }
 }

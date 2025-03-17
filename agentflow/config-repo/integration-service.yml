@@ -1,0 +1,46 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: integration-service
+  datasource:
+    url: jdbc:mariadb://mariadb:3306/agentflow
+    username: agentflow
+    password: agentflow
+    driver-class-name: org.mariadb.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MariaDBDialect
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: kafka:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: integration-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "viettel.dac.integrationservice.dto"
+
+security:
+  encryption:
+    key: ${INTEGRATION_ENCRYPTION_KEY:DefaultEncryptionKeyForDevelopment}
+
+webhook:
+  retry:
+    max-attempts: 5
+    backoff-interval: 60000  # 1 minute in milliseconds
+
+logging:
+  level:
+    viettel.dac.integrationservice: DEBUG

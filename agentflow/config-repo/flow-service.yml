@@ -1,0 +1,44 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: flow-service
+  datasource:
+    url: jdbc:mariadb://mariadb:3306/agentflow
+    username: agentflow
+    password: agentflow
+    driver-class-name: org.mariadb.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MariaDBDialect
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: kafka:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: flow-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "viettel.dac.flowservice.dto"
+
+execution:
+  thread-pool:
+    core-size: 10
+    max-size: 50
+    queue-capacity: 100
+  timeout: 300000  # 5 minutes in milliseconds
+
+logging:
+  level:
+    viettel.dac.flowservice: DEBUG

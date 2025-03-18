@@ -1,5 +1,12 @@
 package viettel.dac.identityservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,21 +21,42 @@ import viettel.dac.identityservice.service.UserService;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "Authentication", description = "Authentication API")
 public class AuthController {
 
     private final AuthService authService;
     private final UserService userService;
 
     @PostMapping("/login")
-    public ResponseEntity<JwtAuthenticationResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+    @Operation(summary = "Authenticate user and generate JWT token",
+            description = "Authenticates a user with username and password, and returns a JWT token")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Successful authentication",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = JwtAuthenticationResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Invalid credentials",
+                    content = @Content)
+    })
+    public ResponseEntity<JwtAuthenticationResponse> authenticateUser(
+            @Parameter(description = "Login credentials", required = true)
+            @Valid @RequestBody LoginRequest loginRequest) {
         JwtAuthenticationResponse response = authService.login(loginRequest);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/register")
-    public ResponseEntity<ApiResponse> registerUser(@Valid @RequestBody SignUpRequest signUpRequest) {
-        // Validate password confirmation if it was part of the request
-
+    @Operation(summary = "Register a new user",
+            description = "Registers a new user with username, email, and password")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "User successfully registered",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = viettel.dac.identityservice.dto.ApiResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Username or email already exists",
+                    content = @Content)
+    })
+    public ResponseEntity<viettel.dac.identityservice.dto.ApiResponse> registerUser(
+            @Parameter(description = "Registration details", required = true)
+            @Valid @RequestBody SignUpRequest signUpRequest) {
         User user = authService.register(signUpRequest);
 
         UserDto userDto = UserDto.builder()
@@ -42,10 +70,19 @@ public class AuthController {
                 .build();
 
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ApiResponse(true, "User registered successfully", userDto));
+                .body(new viettel.dac.identityservice.dto.ApiResponse(true, "User registered successfully", userDto));
     }
 
     @GetMapping("/me")
+    @Operation(summary = "Get current user",
+            description = "Returns the details of the currently authenticated user")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Successfully retrieved user details",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = UserDto.class))),
+            @ApiResponse(responseCode = "401", description = "Not authenticated",
+                    content = @Content)
+    })
     public ResponseEntity<UserDto> getCurrentUser() {
         UserDetailsImpl currentUser = authService.getCurrentUser();
 
@@ -72,41 +109,72 @@ public class AuthController {
     }
 
     @PostMapping("/password/reset-request")
-    public ResponseEntity<ApiResponse> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+    @Operation(summary = "Request password reset",
+            description = "Initiates the password reset process for the specified email")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Password reset initiated",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = viettel.dac.identityservice.dto.ApiResponse.class)))
+    })
+    public ResponseEntity<viettel.dac.identityservice.dto.ApiResponse> requestPasswordReset(
+            @Parameter(description = "Password reset request", required = true)
+            @Valid @RequestBody PasswordResetRequest request) {
         boolean success = authService.initiatePasswordReset(request.getEmail());
 
         // Always return success for security (don't reveal if email exists)
-        return ResponseEntity.ok(new ApiResponse(true,
+        return ResponseEntity.ok(new viettel.dac.identityservice.dto.ApiResponse(true,
                 "If your email is registered, you will receive password reset instructions"));
     }
 
     @PostMapping("/password/reset-complete")
-    public ResponseEntity<ApiResponse> completePasswordReset(@Valid @RequestBody PasswordResetCompleteRequest request) {
+    @Operation(summary = "Complete password reset",
+            description = "Completes the password reset process using a token")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Password successfully reset",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = viettel.dac.identityservice.dto.ApiResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid token or password mismatch",
+                    content = @Content)
+    })
+    public ResponseEntity<viettel.dac.identityservice.dto.ApiResponse> completePasswordReset(
+            @Parameter(description = "Password reset completion details", required = true)
+            @Valid @RequestBody PasswordResetCompleteRequest request) {
         // Validate password confirmation
         if (!request.getNewPassword().equals(request.getConfirmPassword())) {
             return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Password confirmation does not match"));
+                    .body(new viettel.dac.identityservice.dto.ApiResponse(false, "Password confirmation does not match"));
         }
 
         boolean success = authService.completePasswordReset(request.getToken(), request.getNewPassword());
 
         if (!success) {
             return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Invalid or expired password reset token"));
+                    .body(new viettel.dac.identityservice.dto.ApiResponse(false, "Invalid or expired password reset token"));
         }
 
-        return ResponseEntity.ok(new ApiResponse(true, "Password has been reset successfully"));
+        return ResponseEntity.ok(new viettel.dac.identityservice.dto.ApiResponse(true, "Password has been reset successfully"));
     }
 
     @PostMapping("/validate-token")
-    public ResponseEntity<ApiResponse> validateToken(@RequestParam String token) {
+    @Operation(summary = "Validate JWT token",
+            description = "Validates a JWT token and returns whether it is valid")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Token is valid",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = viettel.dac.identityservice.dto.ApiResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Token is invalid",
+                    content = @Content)
+    })
+    public ResponseEntity<viettel.dac.identityservice.dto.ApiResponse> validateToken(
+            @Parameter(description = "JWT token to validate", required = true)
+            @RequestParam String token) {
         boolean valid = authService.validateToken(token);
 
         if (!valid) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new ApiResponse(false, "Invalid or expired token"));
+                    .body(new viettel.dac.identityservice.dto.ApiResponse(false, "Invalid or expired token"));
         }
 
-        return ResponseEntity.ok(new ApiResponse(true, "Token is valid"));
+        return ResponseEntity.ok(new viettel.dac.identityservice.dto.ApiResponse(true, "Token is valid"));
     }
 }

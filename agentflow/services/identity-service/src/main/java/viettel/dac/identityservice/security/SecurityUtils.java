@@ -60,4 +60,10 @@ public class SecurityUtils {
         return authentication != null && authentication.getAuthorities().stream()
                 .anyMatch(auth -> auth.getAuthority().equals(authority));
     }
+
+    public boolean isCurrentUser(String userId) {
+        return getCurrentUserId()
+                .map(currentUserId -> currentUserId.equals(userId))
+                .orElse(false);
+    }
 }

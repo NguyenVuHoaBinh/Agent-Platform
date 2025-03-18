@@ -6,14 +6,13 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,7 +21,6 @@ import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Map;
-import java.util.UUID;
 
 @Configuration
 public class JwksConfig {
@@ -58,16 +56,6 @@ public class JwksConfig {
         return new ImmutableJWKSet<>(jwkSet);
     }
 
-    @Bean
-    public JwtDecoder jwtDecoder(KeyPair keyPair) {
-        return NimbusJwtDecoder.withPublicKey((RSAPublicKey) keyPair.getPublic()).build();
-    }
-
-    @Bean
-    public JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource) {
-        return new NimbusJwtEncoder(jwkSource);
-    }
-
     // Controller for the public JWKS endpoint
     @RestController
     @Order(1)
@@ -80,12 +68,16 @@ public class JwksConfig {
 
         @GetMapping("/.well-known/jwks.json")
         public Map<String, Object> jwks() {
-            // Create a JWK set with the public key only
-            RSAKey publicRsaKey = new RSAKey.Builder(rsaKey.toRSAPublicKey())
-                    .keyID(rsaKey.getKeyID())
-                    .build();
+            try {
+                // Create a JWK set with the public key only
+                RSAKey publicRsaKey = new RSAKey.Builder(rsaKey.toRSAPublicKey())
+                        .keyID(rsaKey.getKeyID())
+                        .build();
 
-            return new JWKSet(publicRsaKey).toJSONObject();
+                return new JWKSet(publicRsaKey).toJSONObject();
+            } catch (com.nimbusds.jose.JOSEException e) {
+                throw new RuntimeException("Error creating JWKS", e);
+            }
         }
     }
 }

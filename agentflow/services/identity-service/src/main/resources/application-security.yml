@@ -1,0 +1,7 @@
+spring:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:AgentFlowSecretKey12345AgentFlowSecretKey12345AgentFlowSecretKey12345}
+      expiration: 86400000  # 24 hours in milliseconds
+      issuer: AgentFlow
+      keyId: ${JWT_KEY_ID:agentflow-key-id}

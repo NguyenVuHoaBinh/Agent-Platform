@@ -9,5 +9,4 @@ public class PromptServiceApplication {
     public static void main(String[] args) {
         SpringApplication.run(PromptServiceApplication.class, args);
     }
-
 }

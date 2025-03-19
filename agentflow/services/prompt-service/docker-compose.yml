@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  prompt-service-db:
+    image: mariadb:11.7.2
+    container_name: prompt-service-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=promptservice_dev
+      - MYSQL_USER=dev
+      - MYSQL_PASSWORD=dev_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - prompt-service-db-data:/var/lib/mysql
+    networks:
+      - agentflow-network
+
+  prompt-service:
+    build: .
+    container_name: prompt-service
+    depends_on:
+      - prompt-service-db
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DATASOURCE_URL=jdbc:mariadb://prompt-service-db:3306/promptservice_dev
+      - SPRING_DATASOURCE_USERNAME=dev
+      - SPRING_DATASOURCE_PASSWORD=dev_password
+    ports:
+      - "8082:8082"
+    networks:
+      - agentflow-network
+
+networks:
+  agentflow-network:
+    driver: bridge
+
+volumes:
+  prompt-service-db-data:

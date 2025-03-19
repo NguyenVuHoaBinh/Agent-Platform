@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import viettel.dac.identityservice.exception.ResourceAlreadyExistsException;
 import viettel.dac.identityservice.exception.ResourceNotFoundException;
@@ -19,21 +21,27 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Service for organization management
+ * With improved transaction boundaries
+ */
 @Service
-@Transactional
-@RequiredArgsConstructor
 @Slf4j
+@RequiredArgsConstructor
 public class OrganizationService {
     private final OrganizationRepository organizationRepository;
     private final UserRepository userRepository;
     private final SecurityUtils securityUtils;
+    private final UserOrganizationService userOrganizationService;
 
     /**
-     * Create a new organization
+     * Create a new organization with current user as member
+     * Critical operation that creates multiple relationships
      *
      * @param organization The organization to create
      * @return The created organization
      */
+    @Transactional(propagation = Propagation.REQUIRED, isolation = Isolation.READ_COMMITTED)
     public Organization createOrganization(Organization organization) {
         // Check if organization name is available
         if (organizationRepository.existsByName(organization.getName())) {
@@ -61,52 +69,62 @@ public class OrganizationService {
 
     /**
      * Get an organization by ID
+     * Read-only method
      *
      * @param id The organization ID
      * @return The organization if found
      */
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
     public Optional<Organization> getOrganizationById(String id) {
         return organizationRepository.findById(id);
     }
 
     /**
      * Get an organization with projects by ID
+     * Read-only method that fetches additional data
      *
      * @param id The organization ID
      * @return The organization with projects if found
      */
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
     public Optional<Organization> getOrganizationWithProjects(String id) {
         return organizationRepository.findByIdWithProjects(id);
     }
 
     /**
-     * Get all organizations
+     * Get all organizations with pagination
+     * Read-only method
      *
      * @param pageable Pagination information
      * @return A page of organizations
      */
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
     public Page<Organization> getAllOrganizations(Pageable pageable) {
         return organizationRepository.findAll(pageable);
     }
 
     /**
      * Search for organizations by name
+     * Read-only method
      *
      * @param searchTerm The search term
-     * @param pageable Pagination information
+     * @param pageable   Pagination information
      * @return A page of matching organizations
      */
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
     public Page<Organization> searchOrganizations(String searchTerm, Pageable pageable) {
         return organizationRepository.findBySearchTerm(searchTerm, pageable);
     }
 
     /**
      * Update an organization
+     * Write operation that requires existing transaction or creates a new one
      *
-     * @param id The organization ID
+     * @param id                  The organization ID
      * @param updatedOrganization The updated organization data
      * @return The updated organization
      */
+    @Transactional(propagation = Propagation.REQUIRED)
     public Organization updateOrganization(String id, Organization updatedOrganization) {
         Organization existingOrganization = organizationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + id));
@@ -127,9 +145,11 @@ public class OrganizationService {
 
     /**
      * Delete an organization
+     * Critical operation that requires its own transaction
      *
      * @param id The organization ID
      */
+    @Transactional(propagation = Propagation.REQUIRED)
     public void deleteOrganization(String id) {
         if (!organizationRepository.existsById(id)) {
             throw new ResourceNotFoundException("Organization not found with id: " + id);
@@ -140,101 +160,57 @@ public class OrganizationService {
     }
 
     /**
-     * Get organizations for a user
-     *
-     * @param userId The user ID
-     * @return List of organizations the user belongs to
-     */
-    public List<Organization> getUserOrganizations(String userId) {
-        if (!userRepository.existsById(userId)) {
-            throw new ResourceNotFoundException("User not found with id: " + userId);
-        }
-
-        return organizationRepository.findByUserId(userId);
-    }
-
-    /**
      * Add a user to an organization
+     * Delegates to UserOrganizationService
      *
      * @param organizationId The organization ID
-     * @param userId The user ID
+     * @param userId         The user ID
      * @return The updated organization
      */
+    @Transactional(propagation = Propagation.REQUIRED)
     public Organization addUserToOrganization(String organizationId, String userId) {
-        Organization organization = organizationRepository.findById(organizationId)
+        userOrganizationService.addUserToOrganization(userId, organizationId);
+        return organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + organizationId));
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-        // Check if user is already a member
-        if (organizationRepository.isMember(organizationId, userId)) {
-            throw new ResourceAlreadyExistsException("User is already a member of this organization");
-        }
-
-        organization.getUsers().add(user);
-        user.getOrganizations().add(organization);
-
-        log.debug("Adding user {} to organization {}", user.getUsername(), organization.getName());
-        return organizationRepository.save(organization);
     }
 
     /**
      * Remove a user from an organization
+     * Delegates to UserOrganizationService
      *
      * @param organizationId The organization ID
-     * @param userId The user ID
+     * @param userId         The user ID
      * @return The updated organization
      */
+    @Transactional(propagation = Propagation.REQUIRED)
     public Organization removeUserFromOrganization(String organizationId, String userId) {
-        Organization organization = organizationRepository.findById(organizationId)
+        userOrganizationService.removeUserFromOrganization(userId, organizationId);
+        return organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + organizationId));
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-        // Check if user is a member
-        if (!organizationRepository.isMember(organizationId, userId)) {
-            throw new ResourceNotFoundException("User is not a member of this organization");
-        }
-
-        // Ensure at least one user remains in the organization
-        if (organization.getUsers().size() <= 1) {
-            throw new IllegalStateException("Cannot remove the last user from an organization");
-        }
-
-        organization.getUsers().remove(user);
-        user.getOrganizations().remove(organization);
-
-        // Remove user from all projects in this organization
-        user.getProjects().removeIf(project -> project.getOrganization().getId().equals(organizationId));
-
-        log.debug("Removing user {} from organization {}", user.getUsername(), organization.getName());
-        return organizationRepository.save(organization);
     }
 
     /**
      * Check if a user is a member of an organization
+     * Delegates to UserOrganizationService
      *
      * @param organizationId The organization ID
-     * @param userId The user ID
+     * @param userId         The user ID
      * @return True if the user is a member
      */
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
     public boolean isUserMemberOfOrganization(String organizationId, String userId) {
-        return organizationRepository.isMember(organizationId, userId);
+        return userOrganizationService.isUserMemberOfOrganization(organizationId, userId);
     }
 
     /**
      * Get members of an organization
+     * Delegates to UserOrganizationService
      *
      * @param organizationId The organization ID
      * @return List of users in the organization
      */
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
     public List<User> getOrganizationMembers(String organizationId) {
-        if (!organizationRepository.existsById(organizationId)) {
-            throw new ResourceNotFoundException("Organization not found with id: " + organizationId);
-        }
-
-        return userRepository.findByOrganizationId(organizationId);
+        return userOrganizationService.getOrganizationMembers(organizationId);
     }
 }

@@ -14,8 +14,6 @@ import viettel.dac.identityservice.model.Organization;
 import viettel.dac.identityservice.model.Project;
 import viettel.dac.identityservice.model.Role;
 import viettel.dac.identityservice.model.User;
-import viettel.dac.identityservice.repository.OrganizationRepository;
-import viettel.dac.identityservice.repository.ProjectRepository;
 import viettel.dac.identityservice.repository.RoleRepository;
 import viettel.dac.identityservice.repository.UserRepository;
 import viettel.dac.identityservice.security.SecurityUtils;
@@ -24,6 +22,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Service for user management
+ * Refactored to use the UserOrganizationService for membership operations
+ */
 @Service
 @Transactional
 @RequiredArgsConstructor
@@ -31,10 +33,9 @@ import java.util.Set;
 public class UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final OrganizationRepository organizationRepository;
-    private final ProjectRepository projectRepository;
     private final PasswordEncoder passwordEncoder;
     private final SecurityUtils securityUtils;
+    private final UserOrganizationService userOrganizationService;
 
     /**
      * Create a new user
@@ -118,7 +119,7 @@ public class UserService {
      * Search for users by name, username, or email
      *
      * @param searchTerm The search term
-     * @param pageable Pagination information
+     * @param pageable   Pagination information
      * @return A page of matching users
      */
     public Page<User> searchUsers(String searchTerm, Pageable pageable) {
@@ -128,7 +129,7 @@ public class UserService {
     /**
      * Update a user's information
      *
-     * @param id The user ID
+     * @param id          The user ID
      * @param updatedUser The updated user data
      * @return The updated user
      */
@@ -184,7 +185,7 @@ public class UserService {
     /**
      * Add a role to a user
      *
-     * @param userId The user ID
+     * @param userId   The user ID
      * @param roleName The role name
      * @return The updated user
      */
@@ -203,7 +204,7 @@ public class UserService {
     /**
      * Remove a role from a user
      *
-     * @param userId The user ID
+     * @param userId   The user ID
      * @param roleName The role name
      * @return The updated user
      */
@@ -230,133 +231,93 @@ public class UserService {
     }
 
     /**
-     * Add a user to an organization
-     *
-     * @param userId The user ID
-     * @param organizationId The organization ID
-     * @return The updated user
-     */
-    public User addUserToOrganization(String userId, String organizationId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-        Organization organization = organizationRepository.findById(organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + organizationId));
-
-        user.addOrganization(organization);
-        log.debug("Adding user {} to organization {}", user.getUsername(), organization.getName());
-        return userRepository.save(user);
-    }
-
-    /**
-     * Remove a user from an organization
-     *
-     * @param userId The user ID
-     * @param organizationId The organization ID
-     * @return The updated user
-     */
-    public User removeUserFromOrganization(String userId, String organizationId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-        Organization organization = organizationRepository.findById(organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + organizationId));
-
-        user.removeOrganization(organization);
-
-        // Also remove user from all projects in this organization
-        List<Project> organizationProjects = projectRepository.findByOrganizationId(organizationId);
-        for (Project project : organizationProjects) {
-            if (project.getUsers().contains(user)) {
-                user.removeProject(project);
-            }
-        }
-
-        log.debug("Removing user {} from organization {}", user.getUsername(), organization.getName());
-        return userRepository.save(user);
-    }
-
-    /**
      * Get all organizations for a user
+     * Delegates to UserOrganizationService
      *
      * @param userId The user ID
      * @return The user's organizations
      */
     public List<Organization> getUserOrganizations(String userId) {
-        return organizationRepository.findByUserId(userId);
+        return userOrganizationService.getUserOrganizations(userId);
+    }
+
+    /**
+     * Add a user to an organization
+     * Delegates to UserOrganizationService
+     *
+     * @param userId         The user ID
+     * @param organizationId The organization ID
+     * @return The updated user
+     */
+    public User addUserToOrganization(String userId, String organizationId) {
+        return userOrganizationService.addUserToOrganization(userId, organizationId);
+    }
+
+    /**
+     * Remove a user from an organization
+     * Delegates to UserOrganizationService
+     *
+     * @param userId         The user ID
+     * @param organizationId The organization ID
+     * @return The updated user
+     */
+    public User removeUserFromOrganization(String userId, String organizationId) {
+        return userOrganizationService.removeUserFromOrganization(userId, organizationId);
     }
 
     /**
      * Add a user to a project
+     * Delegates to UserOrganizationService
      *
-     * @param userId The user ID
+     * @param userId    The user ID
      * @param projectId The project ID
      * @return The updated user
      */
     public User addUserToProject(String userId, String projectId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
-
-        // Check if user is part of the organization
-        Organization organization = project.getOrganization();
-        if (!organizationRepository.isMember(organization.getId(), userId)) {
-            throw new IllegalStateException("User must be a member of the organization first");
-        }
-
-        user.addProject(project);
-        log.debug("Adding user {} to project {}", user.getUsername(), project.getName());
-        return userRepository.save(user);
+        return userOrganizationService.addUserToProject(userId, projectId);
     }
 
     /**
      * Remove a user from a project
+     * Delegates to UserOrganizationService
      *
-     * @param userId The user ID
+     * @param userId    The user ID
      * @param projectId The project ID
      * @return The updated user
      */
     public User removeUserFromProject(String userId, String projectId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
-
-        user.removeProject(project);
-        log.debug("Removing user {} from project {}", user.getUsername(), project.getName());
-        return userRepository.save(user);
+        return userOrganizationService.removeUserFromProject(userId, projectId);
     }
 
     /**
      * Get all projects for a user
+     * Delegates to UserOrganizationService
      *
      * @param userId The user ID
      * @return The user's projects
      */
     public List<Project> getUserProjects(String userId) {
-        return projectRepository.findByUserId(userId);
+        return userOrganizationService.getUserProjects(userId);
     }
 
     /**
      * Get all projects for a user in an organization
+     * Delegates to UserOrganizationService
      *
-     * @param userId The user ID
+     * @param userId         The user ID
      * @param organizationId The organization ID
      * @return The user's projects in the organization
      */
     public List<Project> getUserProjectsInOrganization(String userId, String organizationId) {
-        return projectRepository.findByUserIdAndOrganizationId(userId, organizationId);
+        return userOrganizationService.getUserProjectsInOrganization(userId, organizationId);
     }
 
     /**
      * Change a user's password
      *
-     * @param userId The user ID
+     * @param userId         The user ID
      * @param currentPassword The current password
-     * @param newPassword The new password
+     * @param newPassword    The new password
      * @return The updated user
      */
     public User changePassword(String userId, String currentPassword, String newPassword) {
@@ -377,7 +338,7 @@ public class UserService {
     /**
      * Check if a user has a specific role
      *
-     * @param userId The user ID
+     * @param userId   The user ID
      * @param roleName The role name
      * @return True if the user has the role
      */

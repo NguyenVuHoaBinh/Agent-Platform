@@ -29,6 +29,9 @@ public class PromptExecutionDocument extends BaseDocument {
     private String versionId;
 
     @Field(type = FieldType.Keyword)
+    private String templateId;
+
+    @Field(type = FieldType.Keyword)
     private String providerId;
 
     @Field(type = FieldType.Keyword)
@@ -61,6 +64,19 @@ public class PromptExecutionDocument extends BaseDocument {
     @Field(type = FieldType.Keyword)
     private String status;
 
+    // Additional fields for analytics
+    @Field(type = FieldType.Boolean)
+    private Boolean successful;
+
+    @Field(type = FieldType.Integer)
+    private Integer year;
+
+    @Field(type = FieldType.Integer)
+    private Integer month;
+
+    @Field(type = FieldType.Integer)
+    private Integer day;
+
     /**
      * Convert from entity to document
      */
@@ -71,6 +87,7 @@ public class PromptExecutionDocument extends BaseDocument {
 
         PromptExecutionDocument document = PromptExecutionDocument.builder()
                 .versionId(execution.getVersion().getId())
+                .templateId(execution.getVersion().getTemplate().getId())
                 .providerId(execution.getProviderId())
                 .modelId(execution.getModelId())
                 .inputParameters(execution.getInputParameters())
@@ -82,7 +99,15 @@ public class PromptExecutionDocument extends BaseDocument {
                 .executedAt(execution.getExecutedAt())
                 .executedBy(execution.getExecutedBy())
                 .status(execution.getStatus().name())
+                .successful(execution.getStatus().name().equals("SUCCESS"))
                 .build();
+
+        // Set additional fields for analytics
+        if (execution.getExecutedAt() != null) {
+            document.setYear(execution.getExecutedAt().getYear());
+            document.setMonth(execution.getExecutedAt().getMonthValue());
+            document.setDay(execution.getExecutedAt().getDayOfMonth());
+        }
 
         // Set base document fields
         document.setId(execution.getId());

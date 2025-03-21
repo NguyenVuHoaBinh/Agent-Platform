@@ -78,6 +78,7 @@ public class EntityDtoMapper {
                 .templateName(version.getTemplate().getName())
                 .versionNumber(version.getVersionNumber())
                 .content(version.getContent())
+                .systemPrompt(version.getSystemPrompt())
                 .createdBy(version.getCreatedBy())
                 .createdAt(version.getCreatedAt())
                 .updatedAt(version.getUpdatedAt())
@@ -162,6 +163,7 @@ public class EntityDtoMapper {
         PromptVersion version = PromptVersion.builder()
                 .versionNumber(request.getVersionNumber())
                 .content(request.getContent())
+                .systemPrompt(request.getSystemPrompt())
                 .build();
 
         return version;

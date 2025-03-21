@@ -26,6 +26,7 @@ public class PromptVersionResponse {
     private String templateName;
     private String versionNumber;
     private String content;
+    private String systemPrompt;
     private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

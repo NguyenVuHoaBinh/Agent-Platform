@@ -29,6 +29,8 @@ public class PromptVersionRequest {
     @NotBlank(message = "Content is required")
     private String content;
 
+    private String systemPrompt;
+
     private String parentVersionId;
 
     @Valid

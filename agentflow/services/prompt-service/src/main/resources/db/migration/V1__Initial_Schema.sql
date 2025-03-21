@@ -61,3 +61,4 @@ CREATE TABLE prompt_executions (
                                    status VARCHAR(20) NOT NULL,
                                    FOREIGN KEY (version_id) REFERENCES prompt_versions(id)
 );
+ALTER TABLE prompt_versions ADD COLUMN system_prompt TEXT AFTER content;

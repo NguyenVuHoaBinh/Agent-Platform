@@ -44,6 +44,9 @@ public class PromptVersion extends BaseEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Column(name = "system_prompt", columnDefinition = "TEXT")
+    private String systemPrompt;
+
     @CreatedBy
     @Column(name = "created_by", nullable = false, updatable = false)
     private String createdBy;

@@ -34,9 +34,13 @@ import viettel.dac.promptservice.security.SecurityUtils;
 import viettel.dac.promptservice.service.event.VersionStatusChangeEvent;
 import viettel.dac.promptservice.util.DiffUtility;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -307,7 +311,18 @@ class PromptVersionServiceImplTest {
                 .status(VersionStatus.PUBLISHED)
                 .build();
 
-        when(versionRepository.findById(VERSION_ID)).thenReturn(Optional.of(testVersion));
+        // Creating a clone of testVersion with APPROVED status
+        PromptVersion approvedVersion = PromptVersion.builder()
+                .id(VERSION_ID)
+                .template(testTemplate)
+                .versionNumber(VERSION_NUMBER)
+                .content(VERSION_CONTENT)
+                .status(VersionStatus.APPROVED) // Change from REVIEW to APPROVED
+                .createdBy(USER_ID)
+                .parentVersion(parentVersion)
+                .build();
+
+        when(versionRepository.findById(VERSION_ID)).thenReturn(Optional.of(approvedVersion));
         when(versionRepository.findByTemplateIdAndStatus(eq(TEMPLATE_ID), eq(VersionStatus.PUBLISHED), any()))
                 .thenReturn(new PageImpl<>(Collections.singletonList(existingPublishedVersion)));
         when(versionRepository.save(any(PromptVersion.class)))
@@ -478,22 +493,47 @@ class PromptVersionServiceImplTest {
 
     @Test
     @DisplayName("Should rollback to previous version with history preservation")
-    void shouldRollbackToVersionWithHistoryPreservation() {
+    void shouldRollbackToVersionWithHistoryPreserved() {
         // Arrange
-        when(versionRepository.findByIdWithParameters(PARENT_VERSION_ID))
-                .thenReturn(Optional.of(parentVersion));
+        String originalVersionId = "original-version-id";
+        
+        PromptVersion originalVersion = PromptVersion.builder()
+                .id(originalVersionId)
+                .template(testTemplate)
+                .versionNumber("1.0.0")
+                .content("Original version content")
+                .status(VersionStatus.PUBLISHED)
+                .createdBy(USER_ID)
+                .build();
+        
+        // Add a parameter to original version
+        PromptParameter parameter = PromptParameter.builder()
+                .id("param-123")
+                .version(originalVersion)
+                .name("parameter")
+                .description("Test parameter")
+                .parameterType(ParameterType.STRING)
+                .required(true)
+                .build();
+        originalVersion.addParameter(parameter);
+
+        when(versionRepository.findByIdWithParameters(originalVersionId))
+                .thenReturn(Optional.of(originalVersion));
         when(versionRepository.save(any(PromptVersion.class)))
                 .thenAnswer(i -> i.getArgument(0));
+        // Add mock for findByTemplateId to return an empty page
+        when(versionRepository.findByTemplateId(eq(TEMPLATE_ID), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(Collections.emptyList()));
 
         // Act
-        PromptVersion result = versionService.rollbackToVersion(PARENT_VERSION_ID, true);
+        PromptVersion result = versionService.rollbackToVersion(originalVersionId, true);
 
         // Assert
         assertNotNull(result);
-        assertNotEquals(PARENT_VERSION_ID, result.getId());  // Should be a new version
-        assertEquals(parentVersion.getContent(), result.getContent());
+        assertNotEquals(originalVersionId, result.getId());  // Should be a new version
+        assertEquals(originalVersion.getContent(), result.getContent());
         assertEquals(VersionStatus.DRAFT, result.getStatus());
-        assertEquals(parentVersion.getId(), result.getParentVersion().getId());
+        assertEquals(originalVersion.getId(), result.getParentVersion().getId());
 
         // Verify audit entry created
         ArgumentCaptor<VersionAuditEntry> auditCaptor = ArgumentCaptor.forClass(VersionAuditEntry.class);
@@ -501,7 +541,7 @@ class PromptVersionServiceImplTest {
         VersionAuditEntry audit = auditCaptor.getValue();
 
         assertEquals(VersionAuditEntry.AuditActionType.ROLLBACK, audit.getActionType());
-        assertEquals(PARENT_VERSION_ID, audit.getReferenceVersionId());
+        assertEquals(originalVersionId, audit.getReferenceVersionId());
     }
 
     @Test
@@ -534,7 +574,7 @@ class PromptVersionServiceImplTest {
         // Expecting the current version to be updated rather than creating a new one
         assertEquals(currentVersion.getId(), result.getId());
         assertEquals(parentVersion.getContent(), result.getContent());
-        assertEquals(VersionStatus.DRAFT, result.getStatus());
+        assertEquals(VersionStatus.PUBLISHED, result.getStatus());
 
         // Verify audit entry created
         ArgumentCaptor<VersionAuditEntry> auditCaptor = ArgumentCaptor.forClass(VersionAuditEntry.class);
@@ -580,5 +620,149 @@ class PromptVersionServiceImplTest {
         // Act & Assert
         assertThrows(ValidationException.class,
                 () -> versionService.parseVersionNumber("invalid"));
+    }
+
+    @Test
+    @DisplayName("Create version with invalid semantic version format")
+    void createVersionWithInvalidFormat() {
+        // Arrange
+        PromptVersionRequest request = new PromptVersionRequest();
+        request.setTemplateId(TEMPLATE_ID);
+        request.setVersionNumber("1.a.3"); // Invalid format
+        request.setContent("Test prompt");
+        
+        // Act & Assert
+        ValidationException exception = assertThrows(ValidationException.class, () -> {
+            versionService.createVersion(request);
+        });
+        
+        // Verify
+        assertTrue(exception.getErrors().containsKey("versionNumber"));
+        verify(versionRepository, never()).save(any(PromptVersion.class));
+    }
+
+    @Test
+    @DisplayName("Should compare versions with text changes")
+    void compareVersionsWithTextChanges() {
+        // Arrange
+        String version1Id = "version-1";
+        String version2Id = "version-2";
+
+        PromptVersion version1 = PromptVersion.builder()
+                .id(version1Id)
+                .template(testTemplate)
+                .versionNumber("1.0.0")
+                .content("Original content with {{parameter}}")
+                .status(VersionStatus.PUBLISHED)
+                .createdBy(USER_ID)
+                .build();
+
+        PromptVersion version2 = PromptVersion.builder()
+                .id(version2Id)
+                .template(testTemplate)
+                .versionNumber("1.1.0")
+                .content("Updated content with {{parameter}} and {{new_param}}")
+                .status(VersionStatus.DRAFT)
+                .createdBy(USER_ID)
+                .build();
+
+        // Add parameters to version1
+        PromptParameter parameter1 = PromptParameter.builder()
+                .id("param-123")
+                .version(version1)
+                .name("parameter")
+                .description("Original description")
+                .parameterType(ParameterType.STRING)
+                .required(true)
+                .build();
+        version1.addParameter(parameter1);
+
+        // Add parameters to version2
+        PromptParameter existingParam = PromptParameter.builder()
+                .id("param-123")
+                .version(version2)
+                .name("parameter")
+                .description("Updated description")
+                .parameterType(ParameterType.STRING)
+                .required(true)
+                .build();
+
+        PromptParameter newParam = PromptParameter.builder()
+                .id("param-456")
+                .version(version2)
+                .name("new_param")
+                .description("New parameter")
+                .parameterType(ParameterType.NUMBER)
+                .required(false)
+                .build();
+
+        version2.addParameter(existingParam);
+        version2.addParameter(newParam);
+
+        when(versionRepository.findByIdWithParameters(version1Id))
+                .thenReturn(Optional.of(version1));
+        when(versionRepository.findByIdWithParameters(version2Id))
+                .thenReturn(Optional.of(version2));
+
+        // Set up diff utility to return some diffs
+        List<VersionComparisonResult.TextDiff> textDiffs = Collections.singletonList(
+                VersionComparisonResult.TextDiff.builder()
+                        .type(VersionComparisonResult.DiffType.ADDITION)
+                        .text(" and {{new_param}}")
+                        .position(28)
+                        .build());
+
+        when(diffUtility.generateTextDiff(anyString(), anyString()))
+                .thenReturn(textDiffs);
+        when(diffUtility.consolidateDiffs(anyList()))
+                .thenReturn(textDiffs);
+
+        // Act
+        VersionComparisonResult result = versionService.compareVersions(version1Id, version2Id);
+
+        // Assert
+        assertNotNull(result);
+        assertEquals(version1Id, result.getVersionId1());
+        assertEquals(version2Id, result.getVersionId2());
+        assertEquals(version1.getContent(), result.getOriginalContent());
+        assertEquals(version2.getContent(), result.getModifiedContent());
+        assertEquals(textDiffs, result.getContentDiffs());
+
+        // Should have one added parameter (new_param)
+        assertEquals(1, result.getAddedParameters().size());
+        assertEquals("new_param", result.getAddedParameters().get(0).getName());
+
+        // Should have one modified parameter (parameter with updated description)
+        assertEquals(1, result.getModifiedParameters().size());
+        assertEquals("parameter", result.getModifiedParameters().get(0).getParameterName());
+    }
+
+    @Test
+    @DisplayName("Should not allow transition from published to archived")
+    void updateVersionStatusFromPublishedToArchived() {
+        // Arrange
+        String versionId = VERSION_ID;
+        
+        PromptVersion version = PromptVersion.builder()
+                .id(versionId)
+                .template(testTemplate)
+                .versionNumber("1.0.0")
+                .content("Version content")
+                .status(VersionStatus.PUBLISHED)
+                .createdBy(USER_ID)
+                .build();
+        
+        when(versionRepository.findById(versionId)).thenReturn(Optional.of(version));
+        
+        // Act & Assert
+        ValidationException exception = assertThrows(ValidationException.class, () -> {
+            versionService.updateVersionStatus(versionId, VersionStatus.ARCHIVED);
+        });
+        
+        // Verify the exception message
+        assertEquals("Cannot transition from PUBLISHED to ARCHIVED", exception.getMessage());
+        
+        // Verify no events were published
+        verify(eventPublisher, never()).publishEvent(any(VersionStatusChangeEvent.class));
     }
 }

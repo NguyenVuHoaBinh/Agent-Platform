@@ -411,15 +411,29 @@ class PromptTestingServiceImplTest {
         when(executionRepository.findLatestByVersionId(eq(VERSION_ID), any(PageRequest.class)))
                 .thenReturn(executions);
 
-        // Mock the mapper to convert executions to responses and then to results
+        // Mock the mapper to convert executions to responses with actual objects
+        viettel.dac.promptservice.dto.response.PromptExecutionResponse mockResponse = 
+            viettel.dac.promptservice.dto.response.PromptExecutionResponse.builder()
+                .id(EXECUTION_ID)
+                .versionId(VERSION_ID)
+                .templateId(TEMPLATE_ID)
+                .providerId(PROVIDER_ID)
+                .modelId(MODEL_ID)
+                .response("Test response")
+                .status(ExecutionStatus.SUCCESS)
+                .executedAt(LocalDateTime.now())
+                .build();
+                
         when(mapper.toExecutionResponse(any(PromptExecution.class)))
-                .thenReturn(any());
+                .thenReturn(mockResponse);
 
         // Act
         List<PromptExecutionResult> history = testingService.getTestHistory(VERSION_ID, 10);
 
         // Assert
         assertNotNull(history);
+        assertEquals(2, history.size());
+        assertEquals(EXECUTION_ID, history.get(0).getExecutionId());
 
         // Verify repository call
         verify(executionRepository).findLatestByVersionId(eq(VERSION_ID), any(PageRequest.class));
@@ -464,5 +478,230 @@ class PromptTestingServiceImplTest {
 
         // Verify validator was called
         verify(responseValidator).validateResponse(response, criteria);
+    }
+
+    @Test
+    @DisplayName("Execute prompt with missing required parameters")
+    void executePromptWithMissingRequiredParameters() {
+        // Arrange
+        PromptVersion testVersion = createTestVersion();
+        PromptTestRequest request = new PromptTestRequest();
+        request.setVersionId(testVersion.getId());
+        request.setProviderId("openai");
+        request.setModelId("gpt-3.5-turbo");
+        request.setParameters(Collections.emptyMap()); // Missing required parameters
+        
+        // Mock missing parameter validation
+        ParameterValidationResult invalidResult = new ParameterValidationResult();
+        invalidResult.setValid(false);
+        invalidResult.addIssue("parameter", "Required parameter is missing", ParameterValidationResult.ValidationSeverity.ERROR);
+        invalidResult.getMissingRequired().add("parameter");
+        
+        when(versionRepository.findByIdWithParameters(testVersion.getId())).thenReturn(Optional.of(testVersion));
+        when(parameterValidator.validateParameters(eq(testVersion), anyMap())).thenReturn(invalidResult);
+        when(executionRepository.save(any(PromptExecution.class))).thenAnswer(i -> i.getArgument(0));
+        
+        // Act
+        PromptExecutionResult result = testingService.testPrompt(request);
+        
+        // Assert
+        assertNotNull(result);
+        assertEquals(ExecutionStatus.INVALID_PARAMS, result.getStatus());
+        assertNotNull(result.getErrorMessage());
+        verify(versionRepository).findByIdWithParameters(testVersion.getId());
+        verify(parameterValidator).validateParameters(eq(testVersion), anyMap());
+    }
+
+    @Test
+    @DisplayName("Execute prompt with timeout from LLM service")
+    void executePromptWithLlmTimeout() {
+        // Arrange
+        PromptVersion testVersion = createTestVersion();
+        PromptTestRequest request = new PromptTestRequest();
+        request.setVersionId(testVersion.getId());
+        request.setProviderId("openai");
+        request.setModelId("gpt-3.5-turbo");
+        request.setParameters(Collections.singletonMap("parameter", "test value"));
+        
+        // Mock successful parameter validation
+        ParameterValidationResult validResult = new ParameterValidationResult();
+        validResult.setValid(true);
+        validResult.setValidatedValues(Collections.singletonMap("parameter", "test value"));
+        
+        LlmProvider mockProvider = mock(LlmProvider.class);
+        RuntimeException timeoutException = new RuntimeException("LLM service timeout");
+        
+        when(versionRepository.findByIdWithParameters(testVersion.getId())).thenReturn(Optional.of(testVersion));
+        when(parameterValidator.validateParameters(eq(testVersion), anyMap())).thenReturn(validResult);
+        when(providerFactory.getProvider("openai")).thenReturn(Optional.of(mockProvider));
+        when(mockProvider.executePrompt(any(LlmRequest.class))).thenThrow(timeoutException);
+        
+        // Act
+        PromptExecutionResult result = testingService.testPrompt(request);
+        
+        // Assert
+        assertNotNull(result);
+        assertEquals(ExecutionStatus.ERROR, result.getStatus());
+        assertFalse(result.getValidationPassed() != null && result.getValidationPassed());
+        verify(versionRepository).findByIdWithParameters(testVersion.getId());
+        verify(parameterValidator).validateParameters(eq(testVersion), anyMap());
+        verify(providerFactory).getProvider("openai");
+        verify(mockProvider).executePrompt(any(LlmRequest.class));
+    }
+
+    @Test
+    @DisplayName("Save test result with large output content")
+    void saveTestResultWithLargeOutputContent() {
+        // Arrange
+        PromptVersion testVersion = createTestVersion();
+        PromptTestRequest request = new PromptTestRequest();
+        request.setVersionId(testVersion.getId());
+        request.setProviderId("openai");
+        request.setModelId("gpt-3.5-turbo");
+        request.setParameters(Collections.singletonMap("parameter", "test value"));
+        request.setStoreResult(true); // Request to store the execution
+        
+        // Mock successful parameter validation
+        ParameterValidationResult validResult = new ParameterValidationResult();
+        validResult.setValid(true);
+        validResult.setValidatedValues(Collections.singletonMap("parameter", "test value"));
+        
+        // Create a large response output
+        StringBuilder largeOutput = new StringBuilder();
+        for (int i = 0; i < 1000; i++) {
+            largeOutput.append("This is line ").append(i).append(" of test output. ");
+        }
+        
+        LlmProvider mockProvider = mock(LlmProvider.class);
+        LlmResponse largeResponse = new LlmResponse();
+        largeResponse.setText(largeOutput.toString());
+        largeResponse.setTotalTokenCount(5000);
+        
+        when(versionRepository.findByIdWithParameters(testVersion.getId())).thenReturn(Optional.of(testVersion));
+        when(parameterValidator.validateParameters(eq(testVersion), anyMap())).thenReturn(validResult);
+        when(providerFactory.getProvider("openai")).thenReturn(Optional.of(mockProvider));
+        when(mockProvider.executePrompt(any(LlmRequest.class))).thenReturn(largeResponse);
+        when(executionRepository.save(any(PromptExecution.class))).thenAnswer(i -> i.getArgument(0));
+        when(securityUtils.getCurrentUserId()).thenReturn(Optional.of("test-user"));
+        
+        // Act
+        PromptExecutionResult result = testingService.testPrompt(request);
+        
+        // Assert
+        assertNotNull(result);
+        assertEquals(ExecutionStatus.SUCCESS, result.getStatus());
+        assertTrue(result.getValidationPassed() == null || result.getValidationPassed());
+        verify(executionRepository).save(any(PromptExecution.class));
+        verify(versionRepository).findByIdWithParameters(testVersion.getId());
+        verify(parameterValidator).validateParameters(eq(testVersion), anyMap());
+        
+        // Verify the content in the result
+        assertEquals(largeOutput.toString(), result.getResponse());
+    }
+
+    @Test
+    @DisplayName("Test parameter substitution with complex template")
+    void testParameterSubstitutionWithComplexTemplate() {
+        // Arrange
+        PromptVersion testVersion = createTestVersion();
+        testVersion.setContent("Complex template with {{parameter}} and {{another_param}} and some calculation {{calculation}}");
+        
+        // Add an additional parameter to the test version
+        PromptParameter anotherParam = new PromptParameter();
+        anotherParam.setId("param-456");
+        anotherParam.setName("another_param");
+        anotherParam.setDescription("Another parameter");
+        anotherParam.setParameterType(ParameterType.STRING);
+        anotherParam.setRequired(true);
+        anotherParam.setVersion(testVersion);
+        
+        PromptParameter calculationParam = new PromptParameter();
+        calculationParam.setId("param-789");
+        calculationParam.setName("calculation");
+        calculationParam.setDescription("Calculation parameter");
+        calculationParam.setParameterType(ParameterType.NUMBER);
+        calculationParam.setRequired(true);
+        calculationParam.setVersion(testVersion);
+        
+        testVersion.getParameters().add(anotherParam);
+        testVersion.getParameters().add(calculationParam);
+        
+        PromptTestRequest request = new PromptTestRequest();
+        request.setVersionId(testVersion.getId());
+        request.setProviderId("openai");
+        request.setModelId("gpt-3.5-turbo");
+        
+        // Set all required parameters
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("parameter", "test value");
+        parameters.put("another_param", "another test value");
+        parameters.put("calculation", 42);
+        request.setParameters(parameters);
+        
+        // Mock successful parameter validation
+        ParameterValidationResult validResult = new ParameterValidationResult();
+        validResult.setValid(true);
+        validResult.setValidatedValues(parameters);
+        
+        LlmProvider mockProvider = mock(LlmProvider.class);
+        LlmResponse response = new LlmResponse();
+        response.setText("Generated response");
+        response.setTotalTokenCount(100);
+        
+        when(versionRepository.findByIdWithParameters(testVersion.getId())).thenReturn(Optional.of(testVersion));
+        when(parameterValidator.validateParameters(eq(testVersion), anyMap())).thenReturn(validResult);
+        when(providerFactory.getProvider("openai")).thenReturn(Optional.of(mockProvider));
+        when(mockProvider.executePrompt(any(LlmRequest.class))).thenAnswer(inv -> {
+            LlmRequest req = inv.getArgument(0);
+            // Verify that the parameters were properly substituted
+            assertTrue(req.getPrompt().contains("test value"));
+            assertTrue(req.getPrompt().contains("another test value"));
+            assertTrue(req.getPrompt().contains("42"));
+            return response;
+        });
+        
+        // Act
+        PromptExecutionResult result = testingService.testPrompt(request);
+        
+        // Assert
+        assertNotNull(result);
+        assertEquals(ExecutionStatus.SUCCESS, result.getStatus());
+        assertTrue(result.getValidationPassed() == null || result.getValidationPassed());
+        verify(versionRepository).findByIdWithParameters(testVersion.getId());
+        verify(parameterValidator).validateParameters(eq(testVersion), anyMap());
+        verify(mockProvider).executePrompt(any(LlmRequest.class));
+    }
+
+    /**
+     * Helper method to create a test version
+     */
+    private PromptVersion createTestVersion() {
+        PromptTemplate template = new PromptTemplate();
+        template.setId("template-123");
+        template.setName("Test Template");
+        
+        PromptVersion version = new PromptVersion();
+        version.setId("version-123");
+        version.setTemplate(template);
+        version.setVersionNumber("1.0.0");
+        version.setContent("Test prompt with {{parameter}}");
+        version.setStatus(VersionStatus.PUBLISHED);
+        version.setCreatedAt(LocalDateTime.now());
+        version.setCreatedBy("test-user");
+        
+        // Add a parameter
+        Set<PromptParameter> parameters = new HashSet<>();
+        PromptParameter parameter = new PromptParameter();
+        parameter.setId("param-123");
+        parameter.setName("parameter");
+        parameter.setDescription("Test parameter");
+        parameter.setParameterType(ParameterType.STRING);
+        parameter.setRequired(true);
+        parameter.setVersion(version);
+        parameters.add(parameter);
+        
+        version.setParameters(parameters);
+        
+        return version;
     }
 }

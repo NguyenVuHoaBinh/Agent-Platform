@@ -10,6 +10,8 @@ import co.elastic.clients.elasticsearch.core.search.TotalHitsRelation;
 import co.elastic.clients.elasticsearch.indices.ExistsRequest;
 import co.elastic.clients.transport.endpoints.BooleanResponse;
 import co.elastic.clients.elasticsearch.indices.ElasticsearchIndicesClient;
+import co.elastic.clients.util.ObjectBuilder;
+import java.util.function.Function;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -241,9 +243,14 @@ class PromptSearchServiceTest {
         hits.add(hit);
 
         when(hitsMetadata.hits()).thenReturn(hits);
-        TotalHits totalHits = new TotalHits.Builder().value(1L).relation(TotalHitsRelation.valueOf("eq")).build();
+        TotalHits totalHits = new TotalHits.Builder().value(1L).relation(TotalHitsRelation.Eq).build();
         when(hitsMetadata.total()).thenReturn(totalHits);
         when(searchResponse.hits()).thenReturn(hitsMetadata);
+
+        // Mock index check - return true
+        ElasticsearchIndicesClient indicesClient = mock(ElasticsearchIndicesClient.class);
+        when(elasticsearchClient.indices()).thenReturn(indicesClient);
+        when(indicesClient.exists(any(ExistsRequest.class))).thenReturn(new BooleanResponse(true));
 
         // Stub query builder to return a concrete SearchRequest
         when(queryBuilder.buildTemplateSearchRequest(eq(criteria), eq(pageable), eq(INDEX_NAME)))
@@ -291,9 +298,14 @@ class PromptSearchServiceTest {
         List<Hit<PromptTemplateDocument>> hits = Collections.emptyList();
 
         when(hitsMetadata.hits()).thenReturn(hits);
-        TotalHits totalHits = new TotalHits.Builder().value(0L).relation(TotalHitsRelation.valueOf("eq")).build();
+        TotalHits totalHits = new TotalHits.Builder().value(0L).relation(TotalHitsRelation.Eq).build();
         when(hitsMetadata.total()).thenReturn(totalHits);
         when(searchResponse.hits()).thenReturn(hitsMetadata);
+
+        // Mock index check - return true
+        ElasticsearchIndicesClient indicesClient = mock(ElasticsearchIndicesClient.class);
+        when(elasticsearchClient.indices()).thenReturn(indicesClient);
+        when(indicesClient.exists(any(ExistsRequest.class))).thenReturn(new BooleanResponse(true));
 
         // Stub query builder to return a concrete SearchRequest
         when(queryBuilder.buildTemplateSearchRequest(eq(criteria), eq(pageable), eq(INDEX_NAME)))
@@ -360,7 +372,9 @@ class PromptSearchServiceTest {
 
         BooleanResponse booleanResponse = mock(BooleanResponse.class);
         when(booleanResponse.value()).thenReturn(true);
-        when(indicesClient.exists(any(ExistsRequest.class))).thenReturn(booleanResponse);
+        
+        // Use the correct method signature with Function<ExistsRequest.Builder, ObjectBuilder<ExistsRequest>>
+        when(indicesClient.exists(any(Function.class))).thenReturn(booleanResponse);
 
         // Act
         boolean result = searchService.isIndexAvailable();
@@ -370,7 +384,7 @@ class PromptSearchServiceTest {
 
         // Verify interactions
         verify(elasticsearchClient).indices();
-        verify(indicesClient).exists(any(ExistsRequest.class));
+        verify(indicesClient).exists(any(Function.class));
     }
 
     @Test
@@ -381,7 +395,7 @@ class PromptSearchServiceTest {
         ElasticsearchIndicesClient indicesClient = mock(ElasticsearchIndicesClient.class);
         when(elasticsearchClient.indices()).thenReturn(indicesClient);
 
-        when(indicesClient.exists(any(ExistsRequest.class)))
+        when(indicesClient.exists(any(Function.class)))
                 .thenThrow(new IOException("Index check error"));
 
         // Act
@@ -389,6 +403,10 @@ class PromptSearchServiceTest {
 
         // Assert
         assertFalse(result);
+        
+        // Verify interactions
+        verify(elasticsearchClient).indices();
+        verify(indicesClient).exists(any(Function.class));
     }
 
     @Test

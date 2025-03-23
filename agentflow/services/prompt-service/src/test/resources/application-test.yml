@@ -1,0 +1,56 @@
+spring:
+  # Disable Elasticsearch in tests
+  elasticsearch:
+    enabled: false
+  data:
+    elasticsearch:
+      repositories:
+        enabled: false
+  
+  # H2 in-memory database for tests
+  datasource:
+    url: jdbc:h2:mem:promptservice_test;DB_CLOSE_DELAY=-1
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  
+  # JPA test configuration
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+
+  # Disable Flyway for tests
+  flyway:
+    enabled: false
+
+  # Use in-memory Redis for tests
+  redis:
+    host: localhost
+    port: 6379
+
+# Mock configurations for LLM providers
+llm:
+  providers:
+    openai:
+      enabled: true
+      api-key: test-key
+      base-url: http://localhost:8888
+      models:
+        - name: gpt-4
+          tokens-per-min: 10000
+        - name: gpt-3.5-turbo
+          tokens-per-min: 20000
+    anthropic:
+      enabled: true
+      api-key: test-key
+      base-url: http://localhost:8889
+      models:
+        - name: claude-3-opus
+          tokens-per-min: 10000
+        - name: claude-3-sonnet
+          tokens-per-min: 15000 

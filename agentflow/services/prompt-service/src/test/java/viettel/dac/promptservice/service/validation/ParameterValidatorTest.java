@@ -211,7 +211,7 @@ public class ParameterValidatorTest {
         ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
 
         // Should not be valid due to invalid number format
-        assertTrue(result.isValid()); // It should be valid overall since the parameter is optional
+        assertFalse(result.isValid());
         assertEquals(1, result.getIssues().size());
         assertEquals(ParameterValidationResult.ValidationSeverity.ERROR, result.getIssues().get(0).getSeverity());
         assertEquals(0, result.getValidatedValues().size());
@@ -286,7 +286,7 @@ public class ParameterValidatorTest {
         ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
 
         // Should not validate successfully
-        assertTrue(result.isValid()); // It should be valid overall since the parameter is optional
+        assertFalse(result.isValid());
         assertEquals(1, result.getIssues().size());
         assertEquals(ParameterValidationResult.ValidationSeverity.ERROR, result.getIssues().get(0).getSeverity());
         assertEquals(0, result.getValidatedValues().size());
@@ -327,7 +327,7 @@ public class ParameterValidatorTest {
         ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
 
         // Should not validate successfully
-        assertTrue(result.isValid()); // It should be valid overall since the parameter is optional
+        assertFalse(result.isValid());
         assertEquals(1, result.getIssues().size());
         assertEquals(ParameterValidationResult.ValidationSeverity.ERROR, result.getIssues().get(0).getSeverity());
         assertEquals(0, result.getValidatedValues().size());
@@ -368,7 +368,7 @@ public class ParameterValidatorTest {
         ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
 
         // Should not validate successfully
-        assertTrue(result.isValid()); // It should be valid overall since the parameter is optional
+        assertFalse(result.isValid()); // Changed from assertTrue to assertFalse since any ERROR severity issue makes the validation fail
         assertEquals(1, result.getIssues().size());
         assertEquals(ParameterValidationResult.ValidationSeverity.ERROR, result.getIssues().get(0).getSeverity());
         assertEquals(0, result.getValidatedValues().size());
@@ -409,7 +409,7 @@ public class ParameterValidatorTest {
         ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
 
         // Should not validate successfully
-        assertTrue(result.isValid()); // It should be valid overall since the parameter is optional
+        assertFalse(result.isValid()); // Changed from assertTrue to assertFalse since any ERROR severity issue makes the validation fail
         assertEquals(1, result.getIssues().size());
         assertEquals(ParameterValidationResult.ValidationSeverity.ERROR, result.getIssues().get(0).getSeverity());
         assertEquals(0, result.getValidatedValues().size());
@@ -450,7 +450,7 @@ public class ParameterValidatorTest {
         ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
 
         // Should not validate successfully
-        assertTrue(result.isValid()); // It should be valid overall since the parameter is optional
+        assertFalse(result.isValid()); // Changed from assertTrue to assertFalse since any ERROR severity issue makes the validation fail
         assertEquals(1, result.getIssues().size());
         assertEquals(ParameterValidationResult.ValidationSeverity.ERROR, result.getIssues().get(0).getSeverity());
         assertEquals(0, result.getValidatedValues().size());
@@ -491,7 +491,7 @@ public class ParameterValidatorTest {
         ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
 
         // Should not validate successfully
-        assertTrue(result.isValid()); // It should be valid overall since the parameter is optional
+        assertFalse(result.isValid());
         assertEquals(1, result.getIssues().size());
         assertEquals(ParameterValidationResult.ValidationSeverity.ERROR, result.getIssues().get(0).getSeverity());
         assertEquals(0, result.getValidatedValues().size());
@@ -542,6 +542,72 @@ public class ParameterValidatorTest {
         assertEquals(123, result.getValidatedValues().get("number"));
         assertEquals(true, result.getValidatedValues().get("boolean")); // from default value
         assertEquals(java.time.LocalDate.of(2023, 1, 1), result.getValidatedValues().get("date"));
+    }
+
+    @Test
+    public void testValidateParameters_InvalidFormat() {
+        // Setup a version with array and object parameters
+        Set<PromptParameter> parameters = new HashSet<>();
+        parameters.add(createParameter("array1", "Array 1", ParameterType.ARRAY, false, null, null));
+        parameters.add(createParameter("object1", "Object 1", ParameterType.OBJECT, false, null, null));
+
+        when(mockVersion.getParameters()).thenReturn(parameters);
+
+        // Test with invalid formats
+        Map<String, Object> parameterValues = new HashMap<>();
+        parameterValues.put("array1", "not-an-array");
+        parameterValues.put("object1", "not-an-object");
+
+        ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
+
+        // Should have 2 validation errors
+        assertFalse(result.isValid());
+        assertEquals(2, result.getIssues().size());
+        assertEquals(0, result.getValidatedValues().size());
+    }
+
+    @Test
+    public void testValidateParameters_EmptyRequired() {
+        // Setup a version with a required parameter
+        Set<PromptParameter> parameters = new HashSet<>();
+        parameters.add(createParameter("param1", "Parameter 1", ParameterType.STRING, 
+                true, null, null));
+
+        when(mockVersion.getParameters()).thenReturn(parameters);
+
+        // Test with empty value
+        Map<String, Object> parameterValues = new HashMap<>();
+        parameterValues.put("param1", "");
+
+        ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
+
+        // Should not be valid because empty is not allowed for required parameters
+        assertFalse(result.isValid());
+        assertEquals(1, result.getIssues().size());
+        assertEquals(1, result.getMissingRequired().size());
+        assertEquals("param1", result.getMissingRequired().get(0));
+    }
+
+    @Test
+    public void testValidateParameters_MissingRequired() {
+        // Setup a version with a required parameter
+        Set<PromptParameter> parameters = new HashSet<>();
+        parameters.add(createParameter("param1", "Parameter 1", ParameterType.STRING, 
+                true, null, null));
+
+        when(mockVersion.getParameters()).thenReturn(parameters);
+
+        // Test with missing required parameter
+        Map<String, Object> parameterValues = new HashMap<>();
+        // Deliberately not adding param1
+
+        ParameterValidationResult result = validator.validateParameters(mockVersion, parameterValues);
+
+        // Should not be valid because required parameter is missing
+        assertFalse(result.isValid());
+        assertEquals(1, result.getIssues().size());
+        assertEquals(1, result.getMissingRequired().size());
+        assertEquals("param1", result.getMissingRequired().get(0));
     }
 
     /**

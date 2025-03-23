@@ -349,6 +349,8 @@ class DocumentConversionServiceTest {
         PromptVersion version2 = PromptVersion.builder()
                 .id("version-456")
                 .template(template2)
+                .status(VersionStatus.DRAFT)
+                .versionNumber("1.0.0")
                 .build();
 
         List<PromptVersion> versions = Arrays.asList(testVersion, version2);
@@ -356,6 +358,8 @@ class DocumentConversionServiceTest {
         PromptExecution execution2 = PromptExecution.builder()
                 .id("execution-456")
                 .version(version2)
+                .status(ExecutionStatus.SUCCESS)
+                .executedAt(now)
                 .build();
 
         List<PromptExecution> executions = Arrays.asList(testExecution, execution2);

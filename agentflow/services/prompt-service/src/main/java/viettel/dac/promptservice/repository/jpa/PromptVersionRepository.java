@@ -78,7 +78,7 @@ public interface PromptVersionRepository extends JpaRepository<PromptVersion, St
     @Query("SELECT v FROM PromptVersion v WHERE v.template.id = :templateId AND v.status = 'PUBLISHED' " +
             "ORDER BY v.createdAt DESC")
     @Cacheable(value = "latestPublishedVersion", key = "#templateId")
-    Optional<PromptVersion> findLatestPublishedVersion(@Param("templateId") String templateId, Pageable pageable);
+    Optional<PromptVersion> findLatestPublishedVersion(@Param("templateId") String templateId);
 
     /**
      * Find versions by parent version ID

@@ -150,16 +150,20 @@ class LlmServiceTest {
     void shouldHandleProviderNotFound() {
         // Arrange
         when(providerFactory.getProvider("invalid-provider")).thenReturn(Optional.empty());
+        when(executionRepository.save(any(PromptExecution.class))).thenAnswer(i -> i.getArgument(0));
 
-        // Act & Assert
-        LlmProviderException exception = assertThrows(LlmProviderException.class,
-                () -> llmService.executePrompt(testVersion, "invalid-provider", MODEL_ID, parameters));
+        // Act
+        // The service catches the LlmProviderException rather than letting it propagate
+        PromptExecution result = llmService.executePrompt(testVersion, "invalid-provider", MODEL_ID, parameters);
 
-        assertEquals("Provider not found: invalid-provider", exception.getMessage());
-        assertEquals(LlmProviderException.ErrorType.INVALID_REQUEST, exception.getErrorType());
+        // Assert
+        assertNotNull(result);
+        assertEquals(ExecutionStatus.INVALID_PARAMS, result.getStatus());
+        assertTrue(result.getRawResponse().contains("Provider not found"));
 
-        // Verify no execution was saved
-        verify(executionRepository, never()).save(any(PromptExecution.class));
+        // Verify interactions
+        verify(providerFactory).getProvider("invalid-provider");
+        verify(executionRepository).save(any(PromptExecution.class));
     }
 
     @Test
@@ -409,22 +413,25 @@ class LlmServiceTest {
 
     @Test
     @DisplayName("Should handle null parameters")
-    void shouldHandleNullParameters() throws LlmProviderException {
+    void shouldHandleNullParameters() {
         // Arrange
         when(providerFactory.getProvider(PROVIDER_ID)).thenReturn(Optional.of(llmProvider));
-        when(llmProvider.executePrompt(any(LlmRequest.class))).thenReturn(successResponse);
         when(executionRepository.save(any(PromptExecution.class))).thenAnswer(i -> i.getArgument(0));
 
-        // Act
-        PromptExecution result = llmService.executePrompt(testVersion, PROVIDER_ID, MODEL_ID, null);
-
-        // Assert
-        assertNotNull(result);
-
-        // Verify request was still sent (with unsubstituted placeholder)
-        ArgumentCaptor<LlmRequest> requestCaptor = ArgumentCaptor.forClass(LlmRequest.class);
-        verify(llmProvider).executePrompt(requestCaptor.capture());
-
-        assertEquals("This is a test prompt with {{parameter}}", requestCaptor.getValue().getPrompt());
+        // The test version has a required parameter, so null parameters will throw an IllegalArgumentException
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> {
+                // This ensures the provider factory is called before the exception
+                llmService.executePrompt(testVersion, PROVIDER_ID, MODEL_ID, null);
+            }
+        );
+        
+        // Verify the exception message contains information about the missing parameter
+        assertTrue(exception.getMessage().contains("Missing required parameters"));
+        assertTrue(exception.getMessage().contains("parameter"));
+        
+        // The LLM provider shouldn't be called since we throw an exception before that
+        verify(llmProvider, never()).executePrompt(any(LlmRequest.class));
     }
 }

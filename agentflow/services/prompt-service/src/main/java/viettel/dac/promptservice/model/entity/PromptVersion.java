@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.annotation.CreatedBy;
 import viettel.dac.promptservice.model.enums.VersionStatus;
@@ -27,7 +28,7 @@ import java.util.regex.Matcher;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 @Cacheable("promptVersions")
 public class PromptVersion extends BaseEntity {
 

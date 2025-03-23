@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PastOrPresent;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 import org.springframework.data.annotation.CreatedBy;
 import viettel.dac.promptservice.model.converter.JsonAttributeConverter;
 import viettel.dac.promptservice.model.enums.ExecutionStatus;
@@ -30,7 +31,7 @@ import java.util.Map;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class PromptExecution extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)

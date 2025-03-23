@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 import org.springframework.cache.annotation.Cacheable;
 import viettel.dac.promptservice.model.enums.ParameterType;
 
@@ -25,7 +26,7 @@ import java.time.format.DateTimeParseException;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 @Cacheable("promptParameters")
 public class PromptParameter extends BaseEntity {
 

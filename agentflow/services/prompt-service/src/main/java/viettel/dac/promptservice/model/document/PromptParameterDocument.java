@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 import viettel.dac.promptservice.model.entity.PromptParameter;
@@ -16,7 +17,7 @@ import viettel.dac.promptservice.model.entity.PromptParameter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class PromptParameterDocument {
 
     @Field(type = FieldType.Keyword)

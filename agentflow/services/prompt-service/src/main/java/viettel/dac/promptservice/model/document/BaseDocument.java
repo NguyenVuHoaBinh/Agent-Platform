@@ -2,6 +2,7 @@ package viettel.dac.promptservice.model.document;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
  */
 @Getter
 @Setter
+@SuperBuilder
 public abstract class BaseDocument {
 
     @Id

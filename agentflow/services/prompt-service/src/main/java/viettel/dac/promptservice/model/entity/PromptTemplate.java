@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Pattern;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.annotation.CreatedBy;
 import viettel.dac.promptservice.model.enums.VersionStatus;
@@ -28,7 +29,7 @@ import java.util.Set;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 @Cacheable("promptTemplates")
 public class PromptTemplate extends BaseEntity {
 

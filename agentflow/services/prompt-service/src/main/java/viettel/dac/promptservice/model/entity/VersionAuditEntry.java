@@ -2,6 +2,7 @@ package viettel.dac.promptservice.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 import viettel.dac.promptservice.model.enums.VersionStatus;
 
 import java.time.LocalDateTime;
@@ -15,7 +16,7 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class VersionAuditEntry extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)

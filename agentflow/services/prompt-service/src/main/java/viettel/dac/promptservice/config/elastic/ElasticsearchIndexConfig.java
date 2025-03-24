@@ -3,7 +3,7 @@ package viettel.dac.promptservice.config.elastic;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import lombok.Getter;
 
@@ -31,10 +31,10 @@ public class ElasticsearchIndexConfig {
 
     @Bean
     public ElasticsearchIndexManager indexManager(
-            ElasticsearchOperations operations,
+            ElasticsearchTemplate elasticsearchTemplate,
             ElasticsearchClient client) {
         return new ElasticsearchIndexManager(
-                operations, client,
+                elasticsearchTemplate, client,
                 promptTemplatesIndex, promptVersionsIndex, promptExecutionsIndex,
                 numberOfShards, numberOfReplicas);
     }

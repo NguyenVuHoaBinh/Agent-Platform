@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import viettel.dac.promptservice.config.elastic.ElasticsearchIndexManager;
 
 import java.io.IOException;
@@ -27,7 +27,7 @@ import static org.mockito.Mockito.*;
 public class ElasticsearchIndexManagerTest {
 
     @Mock
-    private ElasticsearchOperations operations;
+    private ElasticsearchTemplate elasticsearchTemplate;
 
     @Mock
     private ElasticsearchClient client;
@@ -49,7 +49,7 @@ public class ElasticsearchIndexManagerTest {
         when(client.indices()).thenReturn(indicesClient);
 
         indexManager = new ElasticsearchIndexManager(
-                operations,
+                elasticsearchTemplate,
                 client,
                 promptTemplatesIndex,
                 promptVersionsIndex,

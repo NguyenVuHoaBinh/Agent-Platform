@@ -3,7 +3,7 @@ package viettel.dac.promptservice.config.elastic;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 
 import java.io.IOException;
 
@@ -13,7 +13,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 @Slf4j
 public class ElasticsearchIndexManager {
-    private final ElasticsearchOperations operations;
+    private final ElasticsearchTemplate elasticsearchTemplate;
     private final ElasticsearchClient client;
     private final String promptTemplatesIndex;
     private final String promptVersionsIndex;

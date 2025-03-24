@@ -843,4 +843,44 @@ public class PromptVersionServiceImpl implements PromptVersionService {
             throw new ValidationException("Version validation failed", errors);
         }
     }
+
+    /**
+     * Creates a PromptVersionRequest from an existing PromptVersion with modified values
+     *
+     * @param sourceVersion The source version to base the request on
+     * @param newVersionNumber The new version number to use
+     * @param newContent The new content to use
+     * @param comment A comment describing the changes (used for audit)
+     * @return A new PromptVersionRequest based on the source version but with updated values
+     */
+    public PromptVersionRequest createVersionRequestFromExisting(
+            PromptVersion sourceVersion, 
+            String newVersionNumber, 
+            String newContent,
+            String comment) {
+        
+        log.debug("Creating version request from existing version: {}", sourceVersion.getId());
+        
+        // Convert parameters from entity to request DTO
+        List<PromptParameterRequest> parameterRequests = sourceVersion.getParameters().stream()
+                .map(param -> PromptParameterRequest.builder()
+                        .name(param.getName())
+                        .description(param.getDescription())
+                        .parameterType(param.getParameterType())
+                        .defaultValue(param.getDefaultValue())
+                        .required(param.isRequired())
+                        .validationPattern(param.getValidationPattern())
+                        .build())
+                .collect(Collectors.toList());
+        
+        // Build the request
+        return PromptVersionRequest.builder()
+                .templateId(sourceVersion.getTemplate().getId())
+                .versionNumber(newVersionNumber)
+                .content(newContent)
+                .systemPrompt(sourceVersion.getSystemPrompt())
+                .parentVersionId(sourceVersion.getId()) // Link back to source version
+                .parameters(parameterRequests)
+                .build();
+    }
 }

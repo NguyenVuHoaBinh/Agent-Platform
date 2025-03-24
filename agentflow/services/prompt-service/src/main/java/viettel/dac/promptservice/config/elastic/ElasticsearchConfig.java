@@ -18,19 +18,20 @@ import org.elasticsearch.client.RestClientBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.elasticsearch.client.ClientConfiguration;
-import org.springframework.data.elasticsearch.client.elc.ElasticsearchConfiguration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.convert.ElasticsearchConverter;
+import org.springframework.data.elasticsearch.core.convert.ElasticsearchCustomConversions;
 import org.springframework.data.elasticsearch.core.convert.MappingElasticsearchConverter;
 import org.springframework.data.elasticsearch.core.mapping.SimpleElasticsearchMappingContext;
 import org.springframework.data.elasticsearch.repository.config.EnableElasticsearchRepositories;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.util.StringUtils;
 
 import javax.net.ssl.SSLContext;
-import java.time.Duration;
+import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -41,7 +42,7 @@ import java.util.stream.Collectors;
 @EnableElasticsearchRepositories(basePackages = "viettel.dac.promptservice.repository.elasticsearch")
 @RequiredArgsConstructor
 @Slf4j
-public class ElasticsearchConfig extends ElasticsearchConfiguration {
+public class ElasticsearchConfig {
 
     private final ObjectMapper objectMapper;
     private final ElasticsearchSslConfig sslConfig;
@@ -70,41 +71,8 @@ public class ElasticsearchConfig extends ElasticsearchConfiguration {
     @Value("${spring.elasticsearch.use-ssl:false}")
     private boolean useSsl;
 
-    @Override
-    public ClientConfiguration clientConfiguration() {
-        ClientConfiguration.MaybeSecureClientConfigurationBuilder builder =
-                (ClientConfiguration.MaybeSecureClientConfigurationBuilder) ClientConfiguration.builder()
-                        .connectedTo(elasticsearchUris)
-                        .withConnectTimeout(Duration.ofMillis(connectionTimeout))
-                        .withSocketTimeout(Duration.ofMillis(socketTimeout));
-
-        if (StringUtils.hasText(elasticsearchUsername) &&
-                StringUtils.hasText(elasticsearchPassword)) {
-            builder = (ClientConfiguration.MaybeSecureClientConfigurationBuilder) builder.withBasicAuth(elasticsearchUsername, elasticsearchPassword);
-        }
-
-        // Fixed SSL configuration
-        if (useSsl) {
-            try {
-                SSLContext sslContext = sslConfig.buildSslContext();
-                if (sslContext != null) {
-                    return (ClientConfiguration) builder.usingSsl(sslContext);
-                } else {
-                    return (ClientConfiguration) builder.usingSsl();
-                }
-            } catch (Exception e) {
-                log.error("Failed to configure SSL with certificate", e);
-                return (ClientConfiguration) builder.usingSsl();
-            }
-        }
-
-        log.info("Configured Elasticsearch connection to {}",
-                Arrays.toString(elasticsearchUris));
-
-        return builder.build();
-    }
-
     @Bean
+    @Primary
     public RestClient restClient() {
         List<HttpHost> httpHosts = Arrays.stream(elasticsearchUris)
                 .map(uri -> {
@@ -147,26 +115,52 @@ public class ElasticsearchConfig extends ElasticsearchConfiguration {
                     return httpClientBuilder;
                 });
 
+        log.info("Configured Elasticsearch connection to {}",
+                Arrays.toString(elasticsearchUris));
+
         return builder.build();
     }
 
     @Bean
-    public ElasticsearchClient elasticsearchClient(RestClient restClient) {
+    public ElasticsearchTransport elasticsearchTransport(RestClient restClient) {
         ObjectMapper esObjectMapper = objectMapper.copy();
         esObjectMapper.registerModule(new JavaTimeModule());
-
         JacksonJsonpMapper jsonpMapper = new JacksonJsonpMapper(esObjectMapper);
-        ElasticsearchTransport transport = new RestClientTransport(restClient, jsonpMapper);
+        return new RestClientTransport(restClient, jsonpMapper);
+    }
 
+    @Bean
+    public ElasticsearchClient elasticsearchClient(ElasticsearchTransport transport) {
         return new ElasticsearchClient(transport);
     }
 
     @Bean
-    public ElasticsearchOperations elasticsearchOperations(
-            ElasticsearchClient elasticsearchClient) {
-        ElasticsearchConverter converter = new MappingElasticsearchConverter(
-                new SimpleElasticsearchMappingContext());
+    public ElasticsearchCustomConversions elasticsearchCustomConversions() {
+        return new ElasticsearchCustomConversions(
+            Collections.singletonList(new BigDecimalToDoubleConverter())
+        );
+    }
 
-        return new ElasticsearchTemplate(elasticsearchClient, converter);
+    @Bean
+    public ElasticsearchConverter elasticsearchConverter() {
+        MappingElasticsearchConverter converter = new MappingElasticsearchConverter(new SimpleElasticsearchMappingContext());
+        converter.setConversions(elasticsearchCustomConversions());
+        return converter;
+    }
+
+    @Bean
+    @Primary
+    public ElasticsearchTemplate elasticsearchTemplate(ElasticsearchClient elasticsearchClient) {
+        return new ElasticsearchTemplate(elasticsearchClient, elasticsearchConverter());
+    }
+
+    /**
+     * Custom converter for BigDecimal to avoid reflection issues with JDK modules
+     */
+    static class BigDecimalToDoubleConverter implements Converter<BigDecimal, Double> {
+        @Override
+        public Double convert(BigDecimal source) {
+            return source != null ? source.doubleValue() : null;
+        }
     }
 }

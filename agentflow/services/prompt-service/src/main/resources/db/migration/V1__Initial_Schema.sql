@@ -21,6 +21,7 @@ CREATE TABLE prompt_versions (
                                  version_number VARCHAR(20) NOT NULL,
                                  content TEXT NOT NULL,
                                  created_at TIMESTAMP NOT NULL,
+                                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                                  created_by VARCHAR(36) NOT NULL,
                                  status VARCHAR(20) NOT NULL,
                                  parent_version_id VARCHAR(36),
@@ -39,6 +40,8 @@ CREATE TABLE prompt_parameters (
                                    default_value TEXT,
                                    required BOOLEAN NOT NULL DEFAULT FALSE,
                                    validation_pattern VARCHAR(255),
+                                   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                                    FOREIGN KEY (version_id) REFERENCES prompt_versions(id) ON DELETE CASCADE,
                                    UNIQUE KEY uk_version_param_name (version_id, name)
 );
@@ -59,6 +62,25 @@ CREATE TABLE prompt_executions (
                                    executed_at TIMESTAMP NOT NULL,
                                    executed_by VARCHAR(36) NOT NULL,
                                    status VARCHAR(20) NOT NULL,
+                                   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                                    FOREIGN KEY (version_id) REFERENCES prompt_versions(id)
 );
+
+-- Create version_audit_logs table
+CREATE TABLE version_audit_logs (
+                                    id VARCHAR(36) NOT NULL PRIMARY KEY,
+                                    version_id VARCHAR(36) NOT NULL,
+                                    action_type VARCHAR(50) NOT NULL,
+                                    performed_by VARCHAR(100) NOT NULL,
+                                    performed_at TIMESTAMP NOT NULL,
+                                    details TEXT,
+                                    previous_status VARCHAR(50),
+                                    new_status VARCHAR(50),
+                                    reference_version_id VARCHAR(36),
+                                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                                    FOREIGN KEY (version_id) REFERENCES prompt_versions(id) ON DELETE CASCADE
+);
+
 ALTER TABLE prompt_versions ADD COLUMN system_prompt TEXT AFTER content;

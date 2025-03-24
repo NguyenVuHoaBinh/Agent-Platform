@@ -34,6 +34,21 @@ spring:
   # Elasticsearch configuration
   elasticsearch:
     uris: ${ES_HOST:localhost}:${ES_PORT:9200}
+    index:
+      prompt-templates: prompt_templates
+      prompt-versions: prompt_versions
+      prompt-executions: prompt_executions
+      number-of-shards: 5
+      number-of-replicas: 1
+    connection-timeout: 5000
+    socket-timeout: 30000
+    max-conn-total: 40
+    max-conn-per-route: 10
+
+  data:
+    elasticsearch:
+      repositories:
+        enabled: true
 
   # Server configuration
   server:
@@ -47,4 +62,7 @@ spring:
       viettel.dac.promptservice: DEBUG
       org.springframework.data: INFO
       org.springframework.web: INFO
+  main:
+    allow-bean-definition-overriding: true
+    allow-circular-references: true
 

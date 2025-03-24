@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS ab_test_results (id VARCHAR(36) PRIMARY KEY, ab_test_id VARCHAR(36) NOT NULL, winner_version_id VARCHAR(36), result_data JSON, created_at TIMESTAMP, updated_at TIMESTAMP, FOREIGN KEY (ab_test_id) REFERENCES ab_tests(id) ON DELETE CASCADE);

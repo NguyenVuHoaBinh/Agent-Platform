@@ -122,4 +122,15 @@ public interface PromptExecutionRepository extends JpaRepository<PromptExecution
             "GROUP BY FUNCTION('DATE', e.executedAt) " +
             "ORDER BY FUNCTION('DATE', e.executedAt)")
     List<Object[]> getExecutionsPerDay(@Param("templateId") String templateId);
+
+    /**
+     * Find executions by status
+     */
+    Page<PromptExecution> findByStatus(ExecutionStatus status, Pageable pageable);
+
+    /**
+     * Count executions by status
+     */
+    @Query("SELECT COUNT(e) FROM PromptExecution e WHERE e.status = :status")
+    long countByStatus(@Param("status") ExecutionStatus status);
 }

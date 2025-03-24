@@ -11,7 +11,6 @@ import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 import viettel.dac.promptservice.model.entity.PromptExecution;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -49,7 +48,7 @@ public class PromptExecutionDocument extends BaseDocument {
     private Integer outputTokens;
 
     @Field(type = FieldType.Float)
-    private BigDecimal cost;
+    private Double cost;
 
     @Field(type = FieldType.Long)
     private Long responseTimeMs;
@@ -93,7 +92,7 @@ public class PromptExecutionDocument extends BaseDocument {
                 .tokenCount(execution.getTokenCount())
                 .inputTokens(execution.getInputTokens())
                 .outputTokens(execution.getOutputTokens())
-                .cost(execution.getCost())
+                .cost(execution.getCost() != null ? execution.getCost().doubleValue() : null)
                 .responseTimeMs(execution.getResponseTimeMs())
                 .executedAt(execution.getExecutedAt())
                 .executedBy(execution.getExecutedBy())

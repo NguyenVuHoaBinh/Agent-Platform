@@ -114,7 +114,7 @@ public class DocumentConversionService {
                 .tokenCount(execution.getTokenCount())
                 .inputTokens(execution.getInputTokens())
                 .outputTokens(execution.getOutputTokens())
-                .cost(execution.getCost())
+                .cost(execution.getCost() != null ? execution.getCost().doubleValue() : null)
                 .responseTimeMs(execution.getResponseTimeMs())
                 .executedAt(execution.getExecutedAt())
                 .executedBy(execution.getExecutedBy())

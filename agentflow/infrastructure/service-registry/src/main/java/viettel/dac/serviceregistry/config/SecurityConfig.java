@@ -13,6 +13,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
+/**
+ * Security configuration for Eureka Server
+ * Handles authentication for Eureka dashboard and Actuator endpoints
+ */
 @Configuration
 public class SecurityConfig {
 
@@ -22,6 +26,9 @@ public class SecurityConfig {
     @Value("${spring.security.user.password:admin}")
     private String password;
 
+    @Value("${management.security.roles:ACTUATOR}")
+    private String actuatorRole;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -29,12 +36,20 @@ public class SecurityConfig {
 
     @Bean
     public InMemoryUserDetailsManager userDetailsService() {
-        UserDetails user = User.builder()
+        UserDetails adminUser = User.builder()
                 .username(username)
                 .password(passwordEncoder().encode(password))
-                .roles("ADMIN")
+                .roles("ADMIN", actuatorRole)
                 .build();
-        return new InMemoryUserDetailsManager(user);
+
+        // Create a specific user for monitoring systems with limited access
+        UserDetails monitorUser = User.builder()
+                .username("monitor")
+                .password(passwordEncoder().encode("monitor"))
+                .roles(actuatorRole)
+                .build();
+
+        return new InMemoryUserDetailsManager(adminUser, monitorUser);
     }
 
     @Bean
@@ -43,8 +58,17 @@ public class SecurityConfig {
         http
                 .securityMatcher("/actuator/**")
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                        .anyRequest().hasRole("ADMIN")
+                        // Public endpoints for basic health monitoring and kubernetes probes
+                        .requestMatchers("/actuator/health", "/actuator/health/liveness",
+                                "/actuator/health/readiness", "/actuator/info")
+                        .permitAll()
+                        // Secured endpoints requiring ACTUATOR role
+                        .requestMatchers("/actuator/metrics/**", "/actuator/prometheus",
+                                "/actuator/loggers/**", "/actuator/env/**")
+                        .hasRole(actuatorRole)
+                        // Admin-only endpoints
+                        .requestMatchers("/actuator/httptrace/**")
+                        .hasRole("ADMIN")
                 )
                 .httpBasic(basic -> {})
                 .csrf(AbstractHttpConfigurer::disable);

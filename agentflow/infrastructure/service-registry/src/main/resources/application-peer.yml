@@ -1,0 +1,79 @@
+# src/main/resources/application-peer.yml
+spring:
+  application:
+    name: service-registry
+  security:
+    user:
+      name: ${EUREKA_USERNAME:admin}
+      password: ${EUREKA_PASSWORD:admin}
+
+server:
+  port: 8761
+
+eureka:
+  instance:
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    preferIpAddress: false
+    metadataMap:
+      instanceId: ${spring.application.name}:${server.port}:${eureka.instance.hostname}
+      # Add any other metadata you want to share
+  client:
+    # Enable registration with peer instances
+    registerWithEureka: true
+    # Enable fetching registry from peer instances
+    fetchRegistry: true
+    # Service URLs for peer instances (will be overridden by environment variable)
+    serviceUrl:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://admin:admin@localhost:8762/eureka/}
+  server:
+    # Enable self-preservation mode for production
+    enableSelfPreservation: true
+    # Adjust renewal threshold to balance availability and stale data
+    renewalPercentThreshold: 0.85
+    # For multi-instance setups, set registry sync delay
+    waitTimeInMsWhenSyncEmpty: 5
+    # Replication configuration
+    enableReplicatedRequestCompression: true
+    # How often peer nodes are updated (milliseconds)
+    peerEurekaNodesUpdateIntervalMs: 10000
+    # Response cache update interval for performance (milliseconds)
+    responseCacheUpdateIntervalMs: 30000
+    # For large deployments, increase this value
+    maxThreadsForPeerReplication: 20
+    # For read requests, response cache ttl in milliseconds
+    responseCacheTtl: 30000
+    # Registry synchronization retry wait in milliseconds
+    registrySyncRetryWaitMs: 30000
+    # Maximum number of retries for registry synchronization
+    numberRegistrySyncRetries: 5
+
+# Management endpoints config for HA monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState,diskSpace
+        readiness:
+          include: readinessState,diskSpace
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+# Logging for HA debugging
+logging:
+  level:
+    root: INFO
+    com.netflix.eureka: INFO
+    com.netflix.discovery: INFO
+    # Uncomment for detailed replication debugging
+    # com.netflix.eureka.cluster: DEBUG
